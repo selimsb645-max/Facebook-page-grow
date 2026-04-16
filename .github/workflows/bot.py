@@ -1,0 +1,69 @@
+import os
+import asyncio
+from playwright.async_api import async_playwright
+
+# তোমার পেজের লিংক
+PAGE_URL = "https://www.facebook.com/profile.php?id=61572126032952" 
+
+async def run_fb_bot(email, password, id_num):
+    async with async_playwright() as p:
+        # আসল ফোনের মতো ব্রাউজার সেটআপ
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36"
+        )
+        page = await context.new_page()
+        
+        try:
+            print(f"--- আইডি {id_num}: {email} লগইন করার চেষ্টা করছে ---")
+            await page.goto("https://m.facebook.com/login", wait_until="networkidle")
+            
+            # ইমেইল এবং পাসওয়ার্ড দেওয়া
+            await page.fill('input[name="email"]', email)
+            await page.fill('input[name="pass"]', password)
+            await page.click('button[name="login"]')
+            
+            # লগইন হওয়ার জন্য ১৫ সেকেন্ড অপেক্ষা (যাতে সিকিউরিটি চেক পার হয়)
+            await asyncio.sleep(15)
+
+            # চেক করা লগইন হয়েছে কি না
+            if "login" in page.url:
+                print(f"❌ আইডি {id_num}: লগইন ব্যর্থ হয়েছে! (হয়তো কোড বা নোটিফিকেশন চাইছে)")
+                return
+
+            print(f"✅ আইডি {id_num}: লগইন সফল!")
+
+            # ফ্রেন্ড রিকোয়েস্ট পাঠানো
+            print(f"আইডি {id_num}: ফ্রেন্ড রিকোয়েস্ট পাঠানোর পেজে যাচ্ছে...")
+            await page.goto("https://m.facebook.com/friends/center/suggestions", wait_until="networkidle")
+            await asyncio.sleep(5)
+
+            # ১০ জন মানুষকে রিকোয়েস্ট পাঠানোর চেষ্টা
+            for i in range(10):
+                # সব ধরণের 'Add Friend' বাটন খোঁজা
+                add_button = await page.query_selector('button:has-text("Add Friend"), div[role="button"]:has-text("Add Friend")')
+                if add_button:
+                    await add_button.click()
+                    print(f"✅ আইডি {id_num}: {i+1} নম্বর রিকোয়েস্ট পাঠানো হয়েছে।")
+                    await asyncio.sleep(5) # ৫ সেকেন্ড বিরতি (মানুষের মতো)
+                else:
+                    print(f"⚠️ আইডি {id_num}: আর কোনো বাটন খুঁজে পাওয়া যাচ্ছে না।")
+                    break
+
+            print(f"🏁 আইডি {id_num} এর কাজ শেষ।")
+            
+        except Exception as e:
+            print(f"❌ আইডি {id_num} এ এরর: {str(e)[:100]}")
+        
+        await browser.close()
+
+async def main():
+    for i in range(1, 6):
+        email = os.getenv(f'FB_EMAIL_{i}')
+        password = os.getenv(f'FB_PASS_{i}')
+        if email and password:
+            await run_fb_bot(email, password, i)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    
